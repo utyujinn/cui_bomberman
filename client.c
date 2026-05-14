@@ -91,7 +91,6 @@ static int callback_client(struct lws *wsi, enum lws_callback_reasons reason,
     
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            fprintf(stderr, "[DBG] 接続確立: %s (running=%d)\n", session->client_name, running);
             session->connected = 1;
             session->wsi = wsi;
 
@@ -129,14 +128,12 @@ static int callback_client(struct lws *wsi, enum lws_callback_reasons reason,
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-            fprintf(stderr, "[DBG] 接続エラー: %s (running=%d)\n", session->client_name, running);
             session->connected = 0;
             session->connection_error = 1;
             // running = 0 は shutdown_client() のみで呼ぶ。ここでは入力スレッドを止めない
             break;
 
         case LWS_CALLBACK_CLOSED:
-            fprintf(stderr, "[DBG] 接続クローズ: %s (running=%d)\n", session->client_name, running);
             session->connected = 0;
             // running = 0 は shutdown_client() のみで呼ぶ。ここでは入力スレッドを止めない
             break;
@@ -225,8 +222,7 @@ static void* input_thread(void* arg) {
 static struct joy_config make_joy_config(int fd) {
     char name[128] = "(unknown)";
     ioctl(fd, JSIOCGNAME(sizeof(name)), name);
-    fprintf(stderr, "[DBG] コントローラ名: %s\n", name);
-
+    
     struct joy_config cfg;
     cfg.btn_bomb = 1;   // ○/B: 右ボタン (両コントローラ共通)
     cfg.btn_l    = 4;
@@ -261,7 +257,6 @@ static void* joystick_thread(void* arg) {
             usleep(500000);
             fd = open(path, O_RDONLY | O_NONBLOCK);
             if (fd >= 0) {
-                fprintf(stderr, "[DBG] コントローラ再接続: %s\n", path);
                 axis_dx = axis_dy = send_tick = 0;
             }
             continue;
@@ -288,7 +283,6 @@ static void* joystick_thread(void* arg) {
 
         // 切断検知 (EAGAIN以外のエラー)
         if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            fprintf(stderr, "[DBG] コントローラ切断: %s\n", path);
             close(fd);
             fd = -1;
             axis_dx = axis_dy = 0;
@@ -461,8 +455,6 @@ void start_input_thread(void) {
             close(fd);
         }
     }
-    if (joy_thread_count == 0)
-        fprintf(stderr, "[DBG] コントローラ未検出 (/dev/input/js0-3)\n");
 }
 
 // 自分のプレイヤー番号を取得
