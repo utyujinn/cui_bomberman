@@ -15,7 +15,8 @@ static int repeatkey=0;
 static char lastkey=' ';
 
 // 危険度マップの構築
-//アイテム1爆弾範囲2爆弾3石4壁5火5安全0
+// 安全0 アイテム1 爆弾範囲(余裕)2 爆弾本体(通行不可)3 石中心4
+// 直前爆弾範囲(物理通行可・危険)5  火/壁/石隅(物理通行不可)6
 void build_danger_map(World *world, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
     // 初期化
     for(int i=0;i<FIELD_Y*4-3;i++)for(int j=0;j<FIELD_X*4-3;j++)danger[i][j]=0;
@@ -27,7 +28,7 @@ void build_danger_map(World *world, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
                 for(int i=y*4-3;i<=y*4+3;i++) {
                     for(int j=x*4-3;j<=x*4+3;j++) {
                         if(i >= 0 && i < FIELD_Y*4-3 && j >= 0 && j < FIELD_X*4-3) {
-                            danger[i][j] = 5;  // 通行不可
+                            danger[i][j] = 6;  // 物理通行不可（壁）
                         }
                     }
                 }
@@ -40,9 +41,9 @@ void build_danger_map(World *world, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
                 for(int i=y*4-3;i<=y*4+3;i++) {
                     for(int j=x*4-3;j<=x*4+3;j++) {
                         if(i >= 0 && i < FIELD_Y*4-3 && j >= 0 && j < FIELD_X*4-3) {
-                            if(i>y*4-1&&i<y*4+1)danger[i][j] = 4;  // 通行不可
+                            if(i>y*4-1&&i<y*4+1)danger[i][j] = 4;  // 石中心（通行不可）
                             else if(j>x*4-1&&j<x*4+1)danger[i][j] = 4;
-                            else danger[i][j]=5;
+                            else danger[i][j]=6;  // 石隅（物理通行不可）
                         }
                     }
                 }
@@ -69,14 +70,14 @@ void build_danger_map(World *world, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
             }
         }
 
-        // 火
+        // 火（現在発生中：物理通行不可として扱う）
         if(s->kind == FIRE) {
             int fx = s->pos.x;
             int fy = s->pos.y;
             for(int i=fy*4-3;i<=fy*4+3;i++) {
                 for(int j=fx*4-3;j<=fx*4+3;j++) {
                     if(i >= 0 && i < FIELD_Y*4-3 && j >= 0 && j < FIELD_X*4-3) {
-                        danger[i][j] = 5;  // 非常に危険
+                        danger[i][j] = 6;  // 物理通行不可（火）
                     }
                 }
             }
@@ -100,12 +101,8 @@ void build_danger_map(World *world, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
                 range = (world->player2.status >> 2) & 0x07;
             }
 
-            int fire_danger = 5; // 火の危険度
-            if(s->timer <= 20) {
-                fire_danger = 5; // 残り時間が短い場合は非常に危険
-            } else {
-                fire_danger = 2; // 爆発まで時間がある場合は低い危険度
-            }
+            // 直前爆弾(5)は物理的には通れるが危険、余裕爆弾(2)は低危険
+            int fire_danger = (s->timer <= 20) ? 5 : 2;
             // 上方向
             for(int r = 1; r <= range; r++) {
                 int cell_y = by - r;
@@ -346,6 +343,48 @@ char find_safe_zone(World *world, int bot_x, int bot_y, int danger[FIELD_Y*4-3][
     return 0;  // 安全地帯が見つからない
 }
 
+// 直前爆弾マス(danger=5)も通り抜けて最寄りの安全地帯を探す
+// 通常BFSが失敗（danger=5に囲まれた）場合の最終手段
+// 火(6)・壁(6)・石(4)・爆弾本体(3)は通らない
+char find_safe_zone_desperate(World *world, int bot_x, int bot_y, int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
+    QueueNode queue[FIELD_X * FIELD_Y * 16];
+    int front = 0, rear = 0;
+    int visited[FIELD_Y*4-3][FIELD_X*4-3];
+    for(int i=0;i<FIELD_Y*4-3;i++)for(int j=0;j<FIELD_X*4-3;j++)visited[i][j]=0;
+
+    queue[rear++] = (QueueNode){bot_x, bot_y, 0, 0};
+    visited[bot_y][bot_x] = 1;
+
+    int dx[] = {0, 0, -1, 1};
+    int dy[] = {-1, 1, 0, 0};
+    char moves[] = {'w', 's', 'a', 'd'};
+
+    while(front < rear) {
+        QueueNode curr = queue[front++];
+
+        if(danger[curr.y][curr.x] <= 1) {
+            return curr.first_move ? curr.first_move : 0;
+        }
+
+        for(int i = 0; i < 4; i++) {
+            int nx = curr.x + dx[i];
+            int ny = curr.y + dy[i];
+            // bounds → visited → 通行可否 の順でチェック（短絡評価を利用）
+            // danger<=2(通常通行可) または danger==5(直前爆弾、物理的には通れる) を許可
+            // danger==3(爆弾本体), 4(石中心), 6(火/壁) は通らない
+            if(nx >= 0 && nx < FIELD_X*4-3 && ny >= 0 && ny < FIELD_Y*4-3 &&
+               !visited[ny][nx] &&
+               (danger[ny][nx] <= 2 || danger[ny][nx] == 5)) {
+                visited[ny][nx] = 1;
+                char first = curr.first_move ? curr.first_move : moves[i];
+                queue[rear++] = (QueueNode){nx, ny, curr.dist + 1, first};
+            }
+        }
+    }
+
+    return 0;
+}
+
 // 隣接する石ブロックをチェック
 int has_adjacent_stone(World *world, int x, int y,int danger[FIELD_Y*4-3][FIELD_X*4-3]) {
     int dx[] = {0, 0, -1, 1};
@@ -432,6 +471,14 @@ char generate_game_input(Scene *scene){
     bot_x>>=1;
     bot_y>>=1;
 
+    // speed=4のとき subx=4 → BFS x%4==2 になると ±4移動で永遠に脱出できない
+    // BFS起点を最寄りの4の倍数にスナップしてBFSに上下方向を返させる
+    // game.cのsubx==4スナップが実際の物理整合を担当する
+    if((bot->status & 0x03) == 2) {
+        if(bot_x % 4 == 2) bot_x -= 2;
+        if(bot_y % 4 == 2) bot_y -= 2;
+    }
+
     // 危険度マップを構築
     int danger[FIELD_Y*4-3][FIELD_X*4-3];
     build_danger_map(world, danger);
@@ -440,6 +487,9 @@ char generate_game_input(Scene *scene){
     if(danger[bot_y][bot_x] >= 2) {
         char escape = find_safe_zone(world, bot_x, bot_y, danger);
         if(escape) return escape;
+        // 通常BFS失敗（直前爆弾に囲まれた）→ 直前爆弾マスを通り抜けてでも逃げる
+        char desperate = find_safe_zone_desperate(world, bot_x, bot_y, danger);
+        if(desperate) return desperate;
     }
 
     // 優先度2: アイテム収集 - 安全なアイテムを取りに行く

@@ -232,31 +232,59 @@ void sub_move_player(World *world,Direction dir,char count,char player){
             if(dir == UP){
                 if(playerPos(world, player).subx == 2){
                     newPos = addPoint(&currentPos, -2, -2);
+                    confirm_movement(world, newPos, player);
                 }else if(playerPos(world, player).subx == 6){
                     newPos = addPoint(&currentPos, 2, -2);
+                    confirm_movement(world, newPos, player);
+                }else if(playerPos(world, player).subx == 4){
+                    newPos = addPoint(&currentPos, -4, -2);
+                    if(confirm_movement(world, newPos, player)){
+                        newPos = addPoint(&currentPos, 4, -2);
+                        confirm_movement(world, newPos, player);
+                    }
                 }
-                confirm_movement(world, newPos, player);
             }else if(dir == DOWN){
                 if(playerPos(world, player).subx == 2){
                     newPos = addPoint(&currentPos, -2, 2);
+                    confirm_movement(world, newPos, player);
                 }else if(playerPos(world, player).subx == 6){
                     newPos = addPoint(&currentPos, 2, 2);
+                    confirm_movement(world, newPos, player);
+                }else if(playerPos(world, player).subx == 4){
+                    newPos = addPoint(&currentPos, -4, 2);
+                    if(confirm_movement(world, newPos, player)){
+                        newPos = addPoint(&currentPos, 4, 2);
+                        confirm_movement(world, newPos, player);
+                    }
                 }
-                confirm_movement(world, newPos, player);
             }else if(dir == LEFT){
                 if(playerPos(world, player).suby == 2){
                     newPos = addPoint(&currentPos, -2, -2);
+                    confirm_movement(world, newPos, player);
                 }else if(playerPos(world, player).suby == 6){
                     newPos = addPoint(&currentPos, -2, 2);
+                    confirm_movement(world, newPos, player);
+                }else if(playerPos(world, player).suby == 4){
+                    newPos = addPoint(&currentPos, -2, -4);
+                    if(confirm_movement(world, newPos, player)){
+                        newPos = addPoint(&currentPos, -2, 4);
+                        confirm_movement(world, newPos, player);
+                    }
                 }
-                confirm_movement(world, newPos, player);
             }else if(dir == RIGHT){
                 if(playerPos(world, player).suby == 2){
                     newPos = addPoint(&currentPos, 2, -2);
+                    confirm_movement(world, newPos, player);
                 }else if(playerPos(world, player).suby == 6){
                     newPos = addPoint(&currentPos, 2, 2);
+                    confirm_movement(world, newPos, player);
+                }else if(playerPos(world, player).suby == 4){
+                    newPos = addPoint(&currentPos, 2, -4);
+                    if(confirm_movement(world, newPos, player)){
+                        newPos = addPoint(&currentPos, 2, 4);
+                        confirm_movement(world, newPos, player);
+                    }
                 }
-                confirm_movement(world, newPos, player);
             }
         }
     }
