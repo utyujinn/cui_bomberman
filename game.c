@@ -628,11 +628,11 @@ void process_sprites_contacts_with_player(World *world){
         }else if(world->sprites[i].kind == ITEM_C){
             if(isSamePos(world->player1.pos, world->sprites[i].pos)){
                 world->sprites[i] = (Sprite){.kind = 0, .status = 0};
-                world->player1.status += 4;//第0・1ビットを除くため4単位で加算する
+                if(((world->player1.status >> 2) & 0x07) < 7) world->player1.status += 4;
             }
             if(isSamePos(world->player2.pos, world->sprites[i].pos)){
                 world->sprites[i] = (Sprite){.kind = 0, .status = 0};
-                world->player2.status += 4;
+                if(((world->player2.status >> 2) & 0x07) < 7) world->player2.status += 4;
             }
         }
     }
