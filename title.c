@@ -21,7 +21,7 @@ void process_frame_title(Scene *scene,char input,char player_id){
     }
 
     if(input==' ' || input=='\n'){
-        if(!(scene->gamemode&2))scene->flag=1;
+        if(!(scene->gamemode&2)){scene->flag=1; scene->timer2=0;}
         else{
             scene->flag=0;
             scene->timer2=0;

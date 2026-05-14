@@ -50,4 +50,8 @@ void shutdown_client(void);
 // 戻り値: プレイヤー番号（1 or 2）、未設定の場合は-1
 int get_my_player_id(void);
 
+// 接続エラーが発生したか確認（1回読むと自動でリセット）
+// 戻り値: エラーあり1、なし0
+int is_connection_error(void);
+
 #endif

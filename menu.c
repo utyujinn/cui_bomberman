@@ -32,6 +32,7 @@ void process_frame_menu(Scene *scene,char input_player1,char input_player2){
 
     if(input_player1=='\n' || input_player2=='\n' || input_player1==' ' || input_player2==' '){
         scene->flag=1;
+        scene->timer2=0;
     }
     if(scene->flag){
         scene->timer2++;

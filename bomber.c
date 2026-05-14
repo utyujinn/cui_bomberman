@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/wait.h>
 #include "graphics.h"
 #include "title.h"
 #include "graphics_title.h"
@@ -38,6 +39,7 @@ int main(int argc, char *argv[]){
     GameState prev_state = STATE_TITLE;
     pid_t server_pid = 0;  // ローカルサーバーのPID
     char server_started = 0;
+    int ws_first_recv = 0;  // DBG: ws_context作成直後のget_received_scene用フラグ
 
     while(1){
         if(scene.state == STATE_TITLE){
@@ -51,6 +53,7 @@ int main(int argc, char *argv[]){
                     execl("./server", "server", NULL);
                     exit(1);  // execl失敗時
                 }
+                fprintf(stderr, "[DBG] 新サーバー起動: PID=%d\n", server_pid);
                 server_started = 1;
             }
 
@@ -81,9 +84,10 @@ int main(int argc, char *argv[]){
         }
 
         if(scene.state != STATE_HELP && scene.state != STATE_TITLE && prev_state == STATE_TITLE && ws_context == NULL){
-            
+
             int win_count = load_win_count(client_name);
-            
+
+            fprintf(stderr, "[DBG] WebSocket接続開始: gamemode=%d, scene.state=%d\n", scene.gamemode, scene.state);
             if(scene.gamemode == 0){
                 ws_context = init_websocket_client(client_name, win_count, "localhost", 8000);
             }
@@ -92,16 +96,40 @@ int main(int argc, char *argv[]){
             }
 
             if (!ws_context) {
-                fprintf(stderr, "Failed to connect to WebSocket server\n");
+                fprintf(stderr, "[DBG] WebSocket接続失敗: ws_context=NULL\n");
                 scene.connection_failed = 1;
                 scene.state = STATE_TITLE;
                 continue;
             }
+            fprintf(stderr, "[DBG] WebSocket接続開始成功: ws_context=%p\n", ws_context);
+            ws_first_recv = 1;
         }
     
         if(ws_context){
             service_websocket(ws_context);
             get_received_scene(&scene);
+            if(ws_first_recv){
+                fprintf(stderr, "[DBG] 接続直後の受信scene: state=%d, flag=%d, timer2=%d, connected=%d\n",
+                        scene.state, scene.flag, scene.timer2, is_websocket_connected());
+                ws_first_recv = 0;
+            }
+            // 接続エラー時はタイトルに戻る
+            if(is_connection_error()){
+                fprintf(stderr, "[DBG] 接続エラー検知: タイトルに戻ります\n");
+                cleanup_websocket(ws_context);
+                ws_context = NULL;
+                set_input_mode(0);
+                scene.connection_failed = 1;
+                scene.state = STATE_TITLE;
+                scene.flag = 0;
+                if(server_pid > 0){
+                    kill(server_pid, SIGTERM);
+                    waitpid(server_pid, NULL, 0);
+                    server_pid = 0;
+                }
+                server_started = 0;
+                continue;
+            }
         }
     
         if(scene.state == STATE_TITLE){
@@ -145,15 +173,16 @@ int main(int argc, char *argv[]){
 
         // リザルト画面からタイトルに戻る際、サーバーから離脱
         if(scene.state == STATE_TITLE && prev_state == STATE_RESULT && ws_context != NULL){
-            //printf("Disconnecting from server and returning to title...\n");
+            fprintf(stderr, "[DBG] RESULT->TITLE クリーンアップ開始: server_pid=%d\n", server_pid);
             cleanup_websocket(ws_context);
             ws_context = NULL;
             set_input_mode(0);  // ローカルモードに戻す
 
             // ローカルサーバーを起動していた場合は停止
             if(server_pid > 0){
-                //printf("Stopping local server (PID: %d)...\n", server_pid);
+                fprintf(stderr, "[DBG] サーバー停止: kill(PID=%d) waitpidあり\n", server_pid);
                 kill(server_pid, SIGTERM);
+                waitpid(server_pid, NULL, 0);
                 server_pid = 0;
             }
 
@@ -161,8 +190,13 @@ int main(int argc, char *argv[]){
             scene.gamemode = 0;  // ゲームモードもリセット
             scene.connection_failed = 0;  // 接続失敗フラグもリセット
             server_started = 0;  // サーバー起動フラグもリセット
+            fprintf(stderr, "[DBG] クリーンアップ完了\n");
         }
 
+        if(scene.state != prev_state){
+            fprintf(stderr, "[DBG] 状態遷移: %d -> %d (flag=%d, timer2=%d, ws=%p)\n",
+                    prev_state, scene.state, scene.flag, scene.timer2, ws_context);
+        }
         printScreen();
         usleep(33000);
         prev_state = scene.state;

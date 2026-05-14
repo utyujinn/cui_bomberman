@@ -28,6 +28,7 @@ struct session_data {
     int win_count;
     struct lws *wsi;
     int connected;
+    int connection_error;  // 接続エラー発生フラグ
 };
 
 static struct session_data global_session;
@@ -64,7 +65,7 @@ static int callback_client(struct lws *wsi, enum lws_callback_reasons reason,
     
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            //printf("[%s] ✓ Connected! Type keys ('.' to exit)\n", session->client_name);
+            fprintf(stderr, "[DBG] 接続確立: %s (running=%d)\n", session->client_name, running);
             session->connected = 1;
             session->wsi = wsi;
 
@@ -102,15 +103,16 @@ static int callback_client(struct lws *wsi, enum lws_callback_reasons reason,
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-            //printf("[%s] Connection error\n", session->client_name);
+            fprintf(stderr, "[DBG] 接続エラー: %s (running=%d)\n", session->client_name, running);
             session->connected = 0;
-            running = 0;
+            session->connection_error = 1;
+            // running = 0 は shutdown_client() のみで呼ぶ。ここでは入力スレッドを止めない
             break;
 
         case LWS_CALLBACK_CLOSED:
-            //printf("[%s] Connection closed\n", session->client_name);
+            fprintf(stderr, "[DBG] 接続クローズ: %s (running=%d)\n", session->client_name, running);
             session->connected = 0;
-            running = 0;
+            // running = 0 は shutdown_client() のみで呼ぶ。ここでは入力スレッドを止めない
             break;
 
         default:
@@ -204,7 +206,14 @@ void* init_websocket_client(const char* client_name, int win_count, const char* 
     global_session.win_count = win_count;
     global_session.connected = 0;
     global_session.wsi = NULL;
+    global_session.connection_error = 0;
     my_player_id = -1;  // プレイヤー番号をリセット
+
+    // 前ゲームの古いsceneデータをリセット（flag/timer2が残ると描画が壊れる）
+    pthread_mutex_lock(&scene_mutex);
+    memset(&received_scene, 0, sizeof(received_scene));
+    received_scene.state = STATE_MENU;
+    pthread_mutex_unlock(&scene_mutex);
 
     // コンテキストを作成
     memset(&info, 0, sizeof(info));
@@ -309,4 +318,13 @@ void start_input_thread(void) {
 // 自分のプレイヤー番号を取得
 int get_my_player_id(void) {
     return my_player_id;
+}
+
+// 接続エラーが発生したか確認（発生後は自動でリセット）
+int is_connection_error(void) {
+    if(global_session.connection_error){
+        global_session.connection_error = 0;
+        return 1;
+    }
+    return 0;
 }
