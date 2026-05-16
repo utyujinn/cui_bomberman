@@ -59,9 +59,9 @@ int main(int argc, char *argv[]){
             process_frame_title(&scene, c, 1);
 
             // タイトル画面でqを押した場合はゲーム終了
-            if(scene.flag == 2){
-                break;
-            }
+            //if(scene.flag == 2){
+             //   break;
+            //}
 
             // 接続失敗からの復帰
             if(scene.connection_failed){
